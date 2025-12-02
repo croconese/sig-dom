@@ -34,5 +34,10 @@ Tanpa visualisasi spasial, manajemen di Delivery Center (DC) atau Kantor Cabang/
  3. VISUALISASI ATRIBUT KIRIMAN dengan Menampilkan data non-spasial (atribut) yang melekat pada setiap titik antaran dimana saat pengguna mengklik sebuah titik antaran di peta, akan muncul pop-up berisi informasi kiriman.
  4. ANALISIS KINERJA ANTARAN yang akan menampilkan dashboard untuk melakukan kalkulasi/perhitungan sederhana serta mengukur kinerja proses antaran.
 
-
+# Tools Pengembangan
+  - Backend : Node.js
+  - Backend Framework: Express.js 
+  - Database Driver:  PostgreSQL
+  - Frontend : React
+  - Map : Leaflet
 
