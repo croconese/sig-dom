@@ -102,7 +102,7 @@ def main_app():
         try:
             with engine.connect() as conn:
                 df = pd.read_sql(text("""
-                    SELECT kodepos, nama_zona, ST_AsGeoJSON(geom)::json as geo 
+                    SELECT kodepos, kecamatan, ST_AsGeoJSON(geom)::json as geo 
                     FROM zona_antaran
                 """), conn)
             
@@ -120,7 +120,7 @@ def main_app():
                             'weight': 2,
                             'fillOpacity': 0.7,   # Opacity naik dikit biar warna lebih solid
                         },
-                        tooltip=folium.Tooltip(f"<b>{row['nama_zona']}</b> ({row['kodepos']})")
+                        tooltip=folium.Tooltip(f"<b>{row['kecamatan']}</b> ({row['kodepos']})")
                     ).add_to(m)
 
                 st_folium(m, width="100%", height=600)
@@ -132,7 +132,7 @@ def main_app():
                     with cols[idx % 5]:
                         warna = get_bright_color(row['kodepos'])
                         st.markdown(f'<div style="background-color:{warna}; padding:10px; border-radius:5px; text-align:center; color:black; font-weight:bold;">{row["kodepos"]}</div>', unsafe_allow_html=True)
-                        st.caption(row['nama_zona'])
+                        st.caption(row['kecamatan'])
             else:
                 st.info("Belum ada data geometri di database.")
         except Exception as e:
