@@ -122,7 +122,7 @@ def main_app():
                             'weight': 2,
                             'fillOpacity': 0.7,
                         },
-                        tooltip=folium.Tooltip(f"Kodepos : {row['kodepos']} <br>Kecamatan :{row['kecamatan']} <br> Kelurahan :{row['kelurahan']} ")
+                        tooltip=folium.Tooltip(f"Kodepos : {row['kodepos']} <br>Kecamatan : {row['kecamatan']} <br> Kelurahan : {row['kelurahan']} ")
                     ).add_to(m)
 
                 st_folium(m, width="100%", height=600)
