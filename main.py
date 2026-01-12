@@ -3,6 +3,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 import folium
 from streamlit_folium import st_folium
+from folium.plugins import AntPath # Tambahan untuk garis animasi
 from datetime import datetime
 import random
 
@@ -81,19 +82,41 @@ def main_app():
                 m = folium.Map(location=[-6.9147, 107.6098], zoom_start=12)
                 for _, row in df.iterrows():
                     color = get_bright_color(row['kodepos'])
-                    # TOOLTIP & POPUP WILAYAH
+                    
+                    # Tooltip Hover
+                    tooltip_html = f"""
+                    <div style="font-family: Arial; font-size: 12px;">
+                        <b style="color: #003366;">{row['kelurahan']}</b><br>
+                        Kodepos: {row['kodepos']}
+                    </div>
+                    """
+                    
+                    # Popup Click (Lebih Cantik)
+                    popup_html = f"""
+                    <div style="width: 220px; font-family: sans-serif;">
+                        <div style="background-color: #003366; color: white; padding: 6px; border-radius: 5px 5px 0 0; text-align: center; font-weight: bold; font-size: 13px;">
+                            DATA WILAYAH
+                        </div>
+                        <div style="padding: 10px; border: 1px solid #ddd; background-color: #fcfcfc; border-top: none;">
+                            <table style="width: 100%; font-size: 11px; border-collapse: collapse;">
+                                <tr><td style="padding: 2px;"><b>Kodepos</b></td><td>: {row['kodepos']}</td></tr>
+                                <tr><td style="padding: 2px;"><b>Kecamatan</b></td><td>: {row['kecamatan']}</td></tr>
+                                <tr><td style="padding: 2px;"><b>Kelurahan</b></td><td>: {row['kelurahan']}</td></tr>
+                                <tr><td style="padding: 2px;"><b>Luas Area</b></td><td style="color: #d9534f; font-weight: bold;">: {row['luas_km2']:.2f} km²</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                    """
+                    
                     folium.GeoJson(
                         row['geo'],
-                        style_function=lambda x, color=color: {'fillColor': color, 'color': 'white', 'weight': 2, 'fillOpacity': 0.7},
-                        tooltip=folium.Tooltip(f"<b>{row['kelurahan']}</b><br>Kodepos: {row['kodepos']}"),
-                        popup=folium.Popup(f"""
-                            <b>Detail Wilayah</b><br>
-                            Kecamatan: {row['kecamatan']}<br>
-                            Kelurahan: {row['kelurahan']}<br>
-                            Kodepos: {row['kodepos']}<br>
-                            Luas Area: {row['luas_km2']:.2f} km²
-                        """, max_width=200)
+                        style_function=lambda x, color=color: {
+                            'fillColor': color, 'color': 'white', 'weight': 1.5, 'fillOpacity': 0.6
+                        },
+                        tooltip=folium.Tooltip(tooltip_html),
+                        popup=folium.Popup(popup_html, max_width=250)
                     ).add_to(m)
+                
                 st_folium(m, width="100%", height=600)
                 
                 st.markdown("### 📋 Keterangan Wilayah & Luas Area")
@@ -101,7 +124,15 @@ def main_app():
                 for idx, row in df.iterrows():
                     with cols[idx % 5]:
                         warna = get_bright_color(row['kodepos'])
-                        st.markdown(f"""<div style="background-color:{warna}; padding:10px; border-radius:5px; text-align:center; color:white; font-weight:bold;">{row['kodepos']}</div><div style="text-align:center; font-size:12px; margin-top:5px;"><b>{row['kelurahan']}</b><br>{row['kecamatan']}<br><b>{row['luas_km2']:.2f} km²</b></div><br>""", unsafe_allow_html=True)
+                        st.markdown(f"""
+                            <div style="background-color:{warna}; padding:10px; border-radius:5px; text-align:center; color:white; font-weight:bold; text-shadow: 1px 1px 2px black;">
+                                {row['kodepos']}
+                            </div>
+                            <div style="text-align:center; font-size:12px; margin-top:5px;">
+                                <b>{row['kelurahan']}</b><br>{row['luas_km2']:.2f} km²
+                            </div>
+                            <br>
+                        """, unsafe_allow_html=True)
         except Exception as e: st.error(f"Error: {e}")
 
     # --- MENU: DATA RIWAYAT ---
@@ -122,7 +153,7 @@ def main_app():
                         selected_date = st.date_input("Pilih Tanggal Kiriman:", datetime.now())
 
                     query_titik = text("""
-                        SELECT connote, produk,jenis_kiriman,berat_kg, status_antaran, penerima, alamat_penerima, waktu_kejadian,
+                        SELECT connote, produk, jenis_kiriman, berat_kg, status_antaran, penerima, alamat_penerima, waktu_kejadian,
                                ST_X(geom) as longitude, ST_Y(geom) as latitude
                         FROM titikan_antaran 
                         WHERE id_petugas = :petugas AND id_kantor = :id_kantor AND DATE(waktu_kejadian) = :tgl
@@ -132,65 +163,63 @@ def main_app():
 
                     if not df_titik.empty:
                         df_titik['waktu_kejadian'] = pd.to_datetime(df_titik['waktu_kejadian'])
-                        
-                        # Hitung jeda waktu antar titik (Durasi Perjalanan)
                         df_titik['jeda'] = df_titik['waktu_kejadian'].diff().dt.total_seconds() / 60
                         df_titik['jeda'] = df_titik['jeda'].fillna(0)
 
                         m_antaran = folium.Map(location=[df_titik['latitude'].mean(), df_titik['longitude'].mean()], zoom_start=14)
                         
+                        # --- FITUR BARU: JALUR ANTARAN (POLYLINE) ---
+                        # Mengambil list koordinat (Lat, Lon) berdasarkan urutan waktu
+                        path_points = df_titik[['latitude', 'longitude']].values.tolist()
+                        
+                        # Menambahkan garis animasi (AntPath)
+                        AntPath(
+                            locations=path_points,
+                            dash_array=[10, 20],
+                            delay=1000,
+                            color='#003366',
+                            pulse_color='#FFD700',
+                            weight=4,
+                            opacity=0.8,
+                            tooltip="Jalur Antaran Petugas"
+                        ).add_to(m_antaran)
+
+                        # Menambahkan Marker untuk setiap titik
                         for i, row in df_titik.iterrows():
                             status_up = str(row['status_antaran']).upper()
                             color_icon = "green" if status_up == "DELIVERED" else "red" if "FAILED" in status_up else "orange"
                             badge_color = "#28a745" if status_up == "DELIVERED" else "#dc3545"
-                            
-                            # --- TOOLTIP CUSTOM (HOVER) ---
-                            tooltip_html = f"""
-                            <div style="font-family: Arial; width: 200px;">
-                                <b style="color: #003366;">{row['connote']}</b><br>
-                                👤 {row['penerima']}<br>
-                                📦 {row['produk']}
-                            </div>
-                            """
-                            
-                            # --- POPUP CUSTOM (CLICK) ---
-                            popup_html = f"""
-                            <div style="width: 250px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                                <div style="background-color: #003366; color: white; padding: 8px; border-radius: 5px 5px 0 0; font-weight: bold; text-align: center;">
-                                    RINCIAN ANTARAN
-                                </div>
-                                <div style="padding: 10px; border: 1px solid #ddd; border-top: none; background-color: #f9f9f9;">
-                                    <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+
+                            t_html = f"<div style='font-family: Arial;'><b>#{i+1} - {row['connote']}</b><br>👤 {row['penerima']}</div>"
+                            p_html = f"""
+                            <div style="width: 250px; font-family: sans-serif;">
+                                <div style="background-color: #003366; color: white; padding: 7px; border-radius: 5px 5px 0 0; font-weight: bold; text-align: center; font-size: 12px;">RINCIAN ANTARAN</div>
+                                <div style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;">
+                                    <table style="width: 100%; font-size: 11px; border-collapse: collapse;">
+                                        <tr><td><b>Urutan Ke</b></td><td>: {i+1}</td></tr>
                                         <tr><td><b>Connote</b></td><td>: {row['connote']}</td></tr>
-                                        <tr><td><b>Produk</b></td><td>: {row['produk']} ({row['jenis_kiriman']}) </td></tr>
-                                        <tr><td><b>Berat</b></td><td>: {row['berat_kg']} kg</td></tr>
                                         <tr><td><b>Penerima</b></td><td>: {row['penerima']}</td></tr>
-                                        <tr><td><b>Alamat</b></td><td>: {row['alamat_penerima'] if row['alamat_penerima'] else '-'}</td></tr>
                                         <tr><td><b>Waktu</b></td><td>: {row['waktu_kejadian'].strftime('%H:%M:%S')}</td></tr>
                                         <tr><td><b>Jeda</b></td><td>: <span style="color: blue;">{int(row['jeda'])} Menit</span></td></tr>
                                     </table>
-                                    <div style="margin-top: 10px; text-align: center;">
-                                        <span style="background-color: {badge_color}; color: white; padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: bold;">
-                                            {status_up}
-                                        </span>
+                                    <div style="margin-top: 8px; text-align: center;">
+                                        <span style="background-color: {badge_color}; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px;">{status_up}</span>
                                     </div>
                                 </div>
                             </div>
                             """
-                            
                             folium.Marker(
                                 [row['latitude'], row['longitude']],
-                                tooltip=folium.Tooltip(tooltip_html),
-                                popup=folium.Popup(popup_html, max_width=300),
+                                tooltip=folium.Tooltip(t_html),
+                                popup=folium.Popup(p_html, max_width=300),
                                 icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')
                             ).add_to(m_antaran)
-
+                            
                         st_folium(m_antaran, width="100%", height=450, key=f"map_{selected_id}_{selected_date}")
 
                         # --- ANALISIS WAKTU ---
                         st.markdown("---")
                         st.subheader("⏱️ Resume Efektivitas Waktu")
-                        df_titik['waktu_kejadian'] = pd.to_datetime(df_titik['waktu_kejadian'])
                         durasi = df_titik['waktu_kejadian'].max() - df_titik['waktu_kejadian'].min()
                         total_menit = durasi.total_seconds() / 60
                         rata_rata = total_menit / len(df_titik) if len(df_titik) > 0 else 0
