@@ -136,22 +136,30 @@ def main_app():
         
         try:
             with engine.connect() as conn:
-                # 1. Ambil daftar pengantar (id_petugas)
-                query_pengantar = text("SELECT DISTINCT id_petugas FROM titikan_antaran WHERE id_kantor = :id_kantor")
-                list_pengantar = conn.execute(query_pengantar, {"id_kantor": user['id']}).fetchall()
-                list_pengantar = [p[0] for p in list_pengantar if p[0] is not None]
+                # 1. Ambil daftar pengantar (ID + Nama) dari tabel petugas_pengantar
+                # Join dilakukan untuk memastikan petugas tersebut memang memiliki data di titikan_antaran
+                query_petugas = text("""
+                    SELECT DISTINCT p.id_petugas, p.nama_petugas 
+                    FROM petugas_pengantar p
+                    JOIN titikan_antaran t ON p.id_petugas = t.id_petugas
+                    WHERE p.id_kantor = :id_kantor
+                """)
+                res_petugas = conn.execute(query_petugas, {"id_kantor": user['id']}).fetchall()
+                
+                # Buat dictionary untuk mapping ID ke Nama agar tampilan di combo box lebih informatif
+                # Format: "ID - NAMA"
+                dict_petugas = {f"{p[0]} - {p[1]}": p[0] for p in res_petugas}
 
-                if list_pengantar:
-                    # Filter ditempatkan di atas peta
-                    selected_pengantar = st.selectbox("Pilih ID Petugas:", list_pengantar)
+                if dict_petugas:
+                    # Combo box menampilkan "ID - NAMA", tapi yang disimpan adalah ID-nya saja
+                    selected_label = st.selectbox("Pilih Petugas Antar:", list(dict_petugas.keys()))
+                    selected_id = dict_petugas[selected_label]
 
-                    # 2. Query Data
+                    # 2. Query Data Riwayat berdasarkan ID yang dipilih
                     query_titik = text("""
                         SELECT 
                             connote, produk, jenis_kiriman, status_antaran, 
-                            is_cod, nominal_cod, berat_kg, penerima, 
-                            alamat_penerima, telp_penerima, kodepos_penerima, 
-                            keterangan, waktu_kejadian, 
+                            penerima, alamat_penerima, waktu_kejadian, 
                             ST_X(geom) as longitude, 
                             ST_Y(geom) as latitude
                         FROM titikan_antaran 
@@ -160,13 +168,13 @@ def main_app():
                     """)
                     
                     df_titik = pd.read_sql(query_titik, conn, params={
-                        "petugas": selected_pengantar, 
+                        "petugas": selected_id, 
                         "id_kantor": user['id']
                     })
 
                     if not df_titik.empty:
-                        # Bagian 1: Peta (Lebar Penuh)
-                        st.subheader(f"Peta Sebaran: {selected_pengantar}")
+                        # Tampilan Peta Full Width
+                        st.subheader(f"Peta Sebaran: {selected_label}")
                         avg_lat = df_titik['latitude'].mean()
                         avg_lon = df_titik['longitude'].mean()
                         
@@ -178,7 +186,7 @@ def main_app():
                             
                             folium.Marker(
                                 location=[row['latitude'], row['longitude']],
-                                popup=f"<b>Connote : </b> {row['connote']}<br> <b> Penerima : </b> {row['penerima']} <br> <b> Produk : </b> {row['produk']} <br> <b> Status : </b> {row['status_antaran']}",
+                                popup=f"<b>Connote:</b> {row['connote']}<br><b>Penerima:</b> {row['penerima']}",
                                 tooltip=f"{row['connote']}",
                                 icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')
                             ).add_to(m_antaran)
@@ -187,32 +195,26 @@ def main_app():
 
                         st.markdown("---")
 
-                        # Bagian 2: Data Riwayat (Di Bawah Peta)
+                        # Bagian Tabel Detail di Bawah Peta
                         st.subheader("Rincian Data Kiriman")
                         
-                        # Menampilkan metrik utama dalam kolom-kolom kecil
-                        m1, m2, m3 = st.columns(3)
+                        m1, m2 = st.columns(2)
                         m1.metric("Total Kiriman", len(df_titik))
-                        m2.metric("Selesai (Success)", len(df_titik[df_titik['status_antaran'].str.contains('Selesai|Delivered', case=False)]))
-                        m3.metric("Gagal/Lainnya", len(df_titik) - len(df_titik[df_titik['status_antaran'].str.contains('Selesai|Delivered', case=False)]))
+                        success_count = len(df_titik[df_titik['status_antaran'].str.contains('Selesai|Delivered', case=False, na=False)])
+                        m2.metric("Status Selesai", success_count)
 
-                        # Tabel Detail dengan filter/sortir bawaan streamlit
                         st.dataframe(
-                            df_titik[[
-                                'connote', 'produk', 'penerima', 'status_antaran', 
-                                'waktu_kejadian', 'alamat_penerima'
-                            ]], 
+                            df_titik[['connote', 'produk', 'penerima', 'status_antaran', 'waktu_kejadian', 'alamat_penerima']], 
                             use_container_width=True,
                             hide_index=True
                         )
                     else:
-                        st.warning(f"Belum ada koordinat untuk petugas {selected_pengantar}")
+                        st.warning(f"Belum ada koordinat untuk petugas {selected_label}")
                 else:
-                    st.info("Tidak ada data petugas untuk kantor ini.")
+                    st.info("Tidak ada data petugas pengantar yang tercatat memiliki titikan di kantor ini.")
 
         except Exception as e:
-            st.error(f"Terjadi kesalahan struktur tabel.")
-            st.expander("Lihat Detail Error").write(e)
+            st.error(f"Kesalahan Database: {e}")
 
 # --- JALANKAN APLIKASI ---
 if not st.session_state.logged_in:
