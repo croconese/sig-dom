@@ -109,6 +109,7 @@ def main_app():
 
                 st_folium(m, width="100%", height=600)
                 
+                # --- UPDATE BAGIAN KETERANGAN WARNA ---
                 st.markdown("### 📋 Keterangan Warna")
                 cols = st.columns(5)
                 for idx, row in df.iterrows():
@@ -116,10 +117,14 @@ def main_app():
                         warna = get_bright_color(row['kodepos'])
                         st.markdown(f"""
                             <div style="background-color:{warna}; padding:10px; border-radius:5px; 
-                            text-align:center; color:white; font-weight:bold; text-shadow: 1px 1px 2px black;">
+                            text-align:center; color:white; font-weight:bold; text-shadow: 1px 1px 2px black; min-height: 50px; display: flex; align-items: center; justify-content: center;">
                                 {row['kodepos']}
                             </div>
-                            <div style="text-align:center; font-size:12px; margin-bottom:10px;">{row['kecamatan']}</div>
+                            <div style="text-align:center; font-size:12px; margin-top:5px;">
+                                <b>{row['kelurahan']}</b><br>
+                                <span style="color: gray;">{row['kecamatan']}</span>
+                            </div>
+                            <br>
                         """, unsafe_allow_html=True)
             else:
                 st.info("Belum ada data geometri di database.")
