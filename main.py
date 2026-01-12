@@ -5,113 +5,190 @@ import folium
 from streamlit_folium import st_folium
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 
+# 1. LOAD KONFIGURASI
 load_dotenv()
 
-# --- FUNGSI KONEKSI ---
+# 2. FUNGSI KONEKSI DATABASE
 def get_engine():
     db_url = os.getenv("DB_URL")
-    if not db_url: return None
+    if not db_url:
+        return None
     try:
-        return create_engine(db_url)
-    except: return None
+        # Menggunakan koneksi pooling untuk kestabilan di Cloud
+        return create_engine(db_url, pool_pre_ping=True)
+    except Exception as e:
+        st.error(f"Koneksi Database Gagal: {e}")
+        return None
 
-# --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="SIG-DOM POS INDONESIA", layout="wide")
 engine = get_engine()
 
-# --- SIDEBAR MENU ---
-with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/id/thumb/0/00/Pos_Indonesia_2012.svg/1200px-Pos_Indonesia_2012.svg.png", width=100)
-    st.title("Menu SIG-DOM")
-    menu = st.radio("Pilih Tampilan:", ["🗺️ Zona Antaran", "history 📦 History Antaran"])
-    st.markdown("---")
-    st.caption("DC Asia Afrika - Bandung")
+# 3. FUNGSI AUTHENTIKASI
+def check_login(username, password):
+    if not engine: return None
+    query = text("""
+        SELECT id_kantor, username, nama_kantor, status 
+        FROM users_dc 
+        WHERE username = :u AND password_hash = :p AND status = 'aktif'
+    """)
+    with engine.connect() as conn:
+        result = conn.execute(query, {"u": username, "p": password}).fetchone()
+        return result
 
-# --- 1. MENU ZONA ANTARAN ---
-if menu == "🗺️ Zona Antaran":
-    st.title("Peta Zona per Kodepos")
-    st.write("Menampilkan pembagian wilayah berdasarkan kodepos dengan pewarnaan berbeda.")
+# --- SESSION STATE UNTUK LOGIN ---
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+if 'user_info' not in st.session_state:
+    st.session_state['user_info'] = None
 
-    if engine:
-        query = text("SELECT kodepos, nama_zona, ST_AsGeoJSON(geom)::json as geojson FROM zona_antaran")
-        with engine.connect() as conn:
-            df_zona = pd.read_sql(query, conn)
-
-        if not df_zona.empty:
-            m = folium.Map(location=[-6.9147, 107.6098], zoom_start=13)
-            
-            # Daftar warna untuk kodepos berbeda
-            colors = ['red', 'blue', 'green', 'purple', 'orange', 'darkred', 'cadetblue']
-            
-            for i, row in df_zona.iterrows():
-                # Pilih warna berdasarkan index agar tiap kodepos beda warna
-                color_index = i % len(colors)
-                folium.GeoJson(
-                    row['geojson'],
-                    style_function=lambda x, color=colors[color_index]: {
-                        'fillColor': color,
-                        'color': 'black',
-                        'weight': 2,
-                        'fillOpacity': 0.4
-                    },
-                    tooltip=f"Kodepos: {row['kodepos']} - {row['nama_zona']}"
-                ).add_to(m)
-            
-            st_folium(m, width=1200, height=600)
-        else:
-            st.warning("Data zona tidak ditemukan di database.")
-
-# --- 2. MENU HISTORY ANTARAN ---
-elif menu == "history 📦 History Antaran":
-    st.title("History Antaran per Petugas")
+# --- HALAMAN LOGIN ---
+if not st.session_state['logged_in']:
+    st.set_page_config(page_title="Login SIG-DOM", page_icon="🔐")
     
-    if engine:
-        # Load daftar petugas untuk filter
-        with engine.connect() as conn:
-            df_petugas = pd.read_sql(text("SELECT * FROM petugas_antaran"), conn)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("https://upload.wikimedia.org/wikipedia/id/thumb/0/00/Pos_Indonesia_2012.svg/1200px-Pos_Indonesia_2012.svg.png", width=150)
+        st.title("SIG-DOM Login")
+        st.subheader("Sistem Informasi Geografis - Delivery Operation")
         
-        # Filter di atas peta
-        c1, c2 = st.columns(2)
-        with c1:
-            petugas_selected = st.selectbox("Pilih Petugas:", df_petugas['nama_petugas'].tolist() if not df_petugas.empty else ["Belum ada data"])
-        with c2:
-            tgl_selected = st.date_input("Pilih Tanggal:")
+        with st.form("login_box"):
+            u = st.text_input("Username")
+            p = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Masuk Ke Dashboard", use_container_width=True)
+            
+            if submitted:
+                user_data = check_login(u, p)
+                if user_data:
+                    st.session_state['logged_in'] = True
+                    st.session_state['user_info'] = user_data
+                    st.success("Login Berhasil!")
+                    st.rerun()
+                else:
+                    st.error("Username/Password salah atau akun dinonaktifkan.")
 
-        # Query data antaran berdasarkan filter
-        query_history = text("""
-            SELECT t.*, ST_Y(t.geom) as lat, ST_X(t.geom) as lon 
-            FROM titikan_antaran t
-            JOIN petugas_antaran p ON t.id_petugas = p.id_petugas
-            WHERE p.nama_petugas = :nama AND DATE(t.created_at) = :tgl
-        """)
+# --- HALAMAN DASHBOARD UTAMA ---
+else:
+    user = st.session_state['user_info']
+    
+    st.set_page_config(page_title=f"SIG-DOM - {user.nama_kantor}", layout="wide")
+
+    # SIDEBAR
+    with st.sidebar:
+        st.image("https://upload.wikimedia.org/wikipedia/id/thumb/0/00/Pos_Indonesia_2012.svg/1200px-Pos_Indonesia_2012.svg.png", width=80)
+        st.title("Menu Utama")
+        st.write(f"📍 **{user.nama_kantor}**")
+        st.markdown("---")
         
-        with engine.connect() as conn:
-            # Gunakan parameter binding untuk keamanan
-            df_hist = pd.read_sql(query_history, conn, params={"nama": petugas_selected, "tgl": tgl_selected})
+        menu = st.radio(
+            "Navigasi:",
+            ["🗺️ Visualisasi Zona", "📦 History Antaran Per Petugas"]
+        )
+        
+        st.markdown("---")
+        if st.button("🚪 Keluar Aplikasi", use_container_width=True):
+            st.session_state['logged_in'] = False
+            st.rerun()
 
-        if not df_hist.empty:
-            st.success(f"Ditemukan {len(df_hist)} titik antaran untuk {petugas_selected}")
-            
-            m_hist = folium.Map(location=[df_hist['lat'].mean(), df_hist['lon'].mean()], zoom_start=14)
-            
-            # Tambahkan garis (Polyline) untuk menunjukkan urutan perjalanan
-            points = []
-            for _, row in df_hist.iterrows():
-                loc = [row['lat'], row['lon']]
-                points.append(loc)
+    # --- MENU 1: VISUALISASI ZONA ---
+    if menu == "🗺️ Visualisasi Zona":
+        st.header(f"Peta Zona Antaran - {user.nama_kantor}")
+        
+        if engine:
+            with engine.connect() as conn:
+                df_zona = pd.read_sql(text("""
+                    SELECT kodepos, nama_zona, ST_AsGeoJSON(geom)::json as geojson 
+                    FROM zona_antaran
+                """), conn)
+
+            if not df_zona.empty:
+                m = folium.Map(location=[-6.9147, 107.6098], zoom_start=13)
                 
-                icon_color = 'green' if row['status_antaran'] == 'DELIVERED' else 'orange'
-                folium.Marker(
-                    loc,
-                    popup=f"Resi: {row['connote']}<br>Status: {row['status_antaran']}",
-                    icon=folium.Icon(color=icon_color, icon='bicycle', prefix='fa')
-                ).add_to(m_hist)
+                # Warna Otomatis per Kodepos
+                colors = ['red', 'blue', 'green', 'purple', 'orange', 'darkred', 'cadetblue', 'darkgreen']
+                
+                for i, row in df_zona.iterrows():
+                    color = colors[i % len(colors)]
+                    folium.GeoJson(
+                        row['geojson'],
+                        name=row['kodepos'],
+                        style_function=lambda x, c=color: {
+                            'fillColor': c,
+                            'color': 'black',
+                            'weight': 2,
+                            'fillOpacity': 0.3
+                        },
+                        tooltip=f"Kodepos: {row['kodepos']} ({row['nama_zona']})"
+                    ).add_to(m)
+                
+                st_folium(m, width="100%", height=600)
+            else:
+                st.info("Data zona belum tersedia untuk kantor ini.")
+
+    # --- MENU 2: HISTORY ANTARAN ---
+    elif menu == "📦 History Antaran Per Petugas":
+        st.header("History Antaran & Jalur Petugas")
+        
+        if engine:
+            with engine.connect() as conn:
+                df_petugas = pd.read_sql(text("SELECT id_petugas, nama_petugas FROM petugas_antaran"), conn)
             
-            if len(points) > 1:
-                folium.PolyLine(points, color="blue", weight=2.5, opacity=0.8).add_to(m_hist)
-            
-            st_folium(m_hist, width=1200, height=500)
-            st.dataframe(df_hist[['connote', 'penerima', 'status_antaran', 'alamat_penerima']])
-        else:
-            st.info(f"Tidak ada record antaran untuk {petugas_selected} pada tanggal {tgl_selected}")
+            # Baris Filter
+            c1, c2 = st.columns(2)
+            with c1:
+                p_pilih = st.selectbox("Pilih Petugas:", df_petugas['nama_petugas'].tolist() if not df_petugas.empty else ["Data Kosong"])
+            with c2:
+                t_pilih = st.date_input("Pilih Tanggal Antaran", datetime.now())
+
+            # Query Data berdasarkan filter waktu_kejadian
+            query_hist = text("""
+                SELECT t.connote, t.penerima, t.status_antaran, t.waktu_kejadian,
+                       ST_Y(t.geom) as lat, ST_X(t.geom) as lon
+                FROM titikan_antaran t
+                JOIN petugas_antaran p ON t.id_petugas = p.id_petugas
+                WHERE p.nama_petugas = :n AND DATE(t.waktu_kejadian) = :d
+                ORDER BY t.waktu_kejadian ASC
+            """)
+
+            with engine.connect() as conn:
+                df_hist = pd.read_sql(query_hist, conn, params={"n": p_pilih, "d": t_pilih})
+
+            if not df_hist.empty:
+                st.success(f"Ditemukan {len(df_hist)} kiriman untuk {p_pilih}")
+                
+                # Layout Peta & Tabel
+                col_map, col_tab = st.columns([2, 1])
+                
+                with col_map:
+                    m_hist = folium.Map(location=[df_hist['lat'].mean(), df_hist['lon'].mean()], zoom_start=14)
+                    
+                    points = []
+                    for _, row in df_hist.iterrows():
+                        coord = [row['lat'], row['lon']]
+                        points.append(coord)
+                        
+                        # Marker Warna
+                        icon_c = 'green' if row['status_antaran'] == 'DELIVERED' else 'orange'
+                        folium.Marker(
+                            coord,
+                            popup=f"Resi: {row['connote']}<br>Waktu: {row['waktu_kejadian']}",
+                            tooltip=f"{row['connote']} - {row['status_antaran']}",
+                            icon=folium.Icon(color=icon_c, icon='bicycle', prefix='fa')
+                        ).add_to(m_hist)
+                    
+                    # Hubungkan titik menjadi jalur rute
+                    if len(points) > 1:
+                        folium.PolyLine(points, color="blue", weight=3, opacity=0.7).add_to(m_hist)
+                    
+                    st_folium(m_hist, width="100%", height=500)
+                
+                with col_tab:
+                    st.write("📋 **Detail Urutan Antaran**")
+                    df_display = df_hist[['waktu_kejadian', 'connote', 'status_antaran']]
+                    st.dataframe(df_display, use_container_width=True, height=450)
+            else:
+                st.warning(f"Tidak ada aktivitas antaran untuk {p_pilih} pada tanggal tersebut.")
+
+# FOOTER
+st.markdown("---")
+st.caption(f"SIG-DOM v1.0 | PT Pos Indonesia | {datetime.now().year}")
