@@ -122,7 +122,7 @@ def main_app():
                         selected_date = st.date_input("Pilih Tanggal Kiriman:", datetime.now())
 
                     query_titik = text("""
-                        SELECT connote, produk, status_antaran, penerima, alamat_penerima, waktu_kejadian,
+                        SELECT connote, produk,jenis_kiriman,berat_kg, status_antaran, penerima, alamat_penerima, waktu_kejadian,
                                ST_X(geom) as longitude, ST_Y(geom) as latitude
                         FROM titikan_antaran 
                         WHERE id_petugas = :petugas AND id_kantor = :id_kantor AND DATE(waktu_kejadian) = :tgl
@@ -162,7 +162,8 @@ def main_app():
                                 <div style="padding: 10px; border: 1px solid #ddd; border-top: none; background-color: #f9f9f9;">
                                     <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
                                         <tr><td><b>Connote</b></td><td>: {row['connote']}</td></tr>
-                                        <tr><td><b>Produk</b></td><td>: {row['produk']}</td></tr>
+                                        <tr><td><b>Produk</b></td><td>: {row['produk']} ({row['jenis_kiriman']}) </td></tr>
+                                        <tr><td><b>Berat</b></td><td>: {row['berat_kg']} kg</td></tr>
                                         <tr><td><b>Penerima</b></td><td>: {row['penerima']}</td></tr>
                                         <tr><td><b>Alamat</b></td><td>: {row['alamat_penerima'] if row['alamat_penerima'] else '-'}</td></tr>
                                         <tr><td><b>Waktu</b></td><td>: {row['waktu_kejadian'].strftime('%H:%M:%S')}</td></tr>
