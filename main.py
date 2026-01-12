@@ -73,10 +73,10 @@ def main_app():
     st.sidebar.info(f"📍 {user['nama']}")
     
     menu = st.sidebar.selectbox("Pilih Menu:", [
-        "🏠 Dashboard & Statistik", 
+        #"🏠 Dashboard & Statistik", 
         "🗺️ Peta Wilayah Antaran", 
-        "📦 Data Titikan Paket", 
-        "⚙️ Manajemen User"
+        "📦 Data Riwayat Antaran", 
+        #"⚙️ Manajemen User"
     ])
     
     if st.sidebar.button("Logout"):
@@ -144,7 +144,7 @@ def main_app():
         except Exception as e:
             st.error(f"Gagal memuat peta: {e}")
 
-    elif menu == "📦 Data Titikan Paket":
+    elif menu == "📦 Data Riwayat Antaran":
         st.header("Data Riwayat Antaran")
         data_dummy = {
             'No Resi': ['P24001', 'P24002'],
