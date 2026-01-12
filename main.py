@@ -64,7 +64,6 @@ def login_ui():
 def main_app():
     user = st.session_state.user_info
     
-    # SIDEBAR NAVIGASI
     st.sidebar.title("SIG-DOM")
     st.sidebar.markdown(f"**📍 {user['nama']}**")
     st.sidebar.markdown("---")
@@ -80,10 +79,8 @@ def main_app():
         st.session_state.user_info = None
         st.rerun()
 
-    # --- KONTEN MENU ---
     if menu == "🗺️ Peta Wilayah Antaran":
         st.header("Visualisasi Spasial Wilayah Antaran")
-        
         try:
             with engine.connect() as conn:
                 df = pd.read_sql(text("""
@@ -93,7 +90,6 @@ def main_app():
             
             if not df.empty:
                 m = folium.Map(location=[-6.9147, 107.6098], zoom_start=12)
-                
                 for _, row in df.iterrows():
                     color = get_bright_color(row['kodepos'])
                     folium.GeoJson(
@@ -135,7 +131,6 @@ def main_app():
         
         try:
             with engine.connect() as conn:
-                # 1. Ambil daftar pengantar (ID + Nama)
                 query_petugas = text("""
                     SELECT DISTINCT p.id_petugas, p.nama_petugas 
                     FROM petugas_antaran p
@@ -146,17 +141,13 @@ def main_app():
                 dict_petugas = {f"{p[0]} - {p[1]}": p[0] for p in res_petugas}
 
                 if dict_petugas:
-                    # --- BAGIAN FILTER (Petugas & Tanggal) ---
                     col_f1, col_f2 = st.columns(2)
                     with col_f1:
                         selected_label = st.selectbox("Pilih Petugas Antar:", list(dict_petugas.keys()))
                         selected_id = dict_petugas[selected_label]
                     with col_f2:
-                        # Filter Tanggal (Default: Hari Ini)
                         selected_date = st.date_input("Pilih Tanggal Kiriman:", datetime.now())
 
-                    # 2. Query Data Riwayat dengan Filter Tanggal
-                    # Kita gunakan DATE(waktu_kejadian) untuk membandingkan hanya tanggalnya saja
                     query_titik = text("""
                         SELECT 
                             connote, produk, jenis_kiriman, status_antaran, 
@@ -179,7 +170,6 @@ def main_app():
                     })
 
                     if not df_titik.empty:
-                        # Peta Full Width
                         st.subheader(f"Peta Sebaran: {selected_label} ({selected_date.strftime('%d %b %Y')})")
                         avg_lat = df_titik['latitude'].mean()
                         avg_lon = df_titik['longitude'].mean()
@@ -187,21 +177,24 @@ def main_app():
 
                         for _, row in df_titik.iterrows():
                             status_str = str(row['status_antaran']).upper()
-                            color_icon = "green" if "SELESAI" in status_str or "DELIVERED" in status_str else "orange"
+                            
+                            # LOGIKA WARNA TAG LOKASI
+                            if "FAILEDTODELIVERED" in status_str:
+                                color_icon = "red"
+                            elif "SELESAI" in status_str or "DELIVERED" in status_str:
+                                color_icon = "green"
+                            else:
+                                color_icon = "orange"
                             
                             tooltip_html = f"""
                             <div style="font-family: sans-serif; font-size: 12px; width: 250px;">
                                 <h4 style="margin:0 0 5px 0; color:#003366;">{row['connote']}</h4>
                                 <b>Penerima:</b> {row['penerima']}<br>
-                                <b>Alamat:</b> {row['alamat_penerima']}<br>
-                                <b>Produk:</b> {row['produk']} ({row['jenis_kiriman']})<br>
-                                <b>Berat:</b> {row['berat_kg']} kg<br>
-                                <b>Status:</b> <span style="color:{'green' if color_icon=='green' else 'red'};">{row['status_antaran']}</span><br>
+                                <b>Status:</b> <span style="color:{color_icon};">{row['status_antaran']}</span><br>
                                 <b>Waktu:</b> {row['waktu_kejadian']}<br>
                                 <b>Keterangan:</b> {row['keterangan'] or '-'}
                             </div>
                             """
-                            
                             folium.Marker(
                                 location=[row['latitude'], row['longitude']],
                                 popup=folium.Popup(tooltip_html, max_width=300),
@@ -210,20 +203,29 @@ def main_app():
                             ).add_to(m_antaran)
                         
                         st_folium(m_antaran, width="100%", height=500, key=f"map_{selected_id}_{selected_date}")
-
                         st.markdown("---")
 
                         # --- BAGIAN RESUME & RINCIAN ---
                         st.subheader(f"📊 Resume & Rincian - {selected_date.strftime('%d/%m/%Y')}")
                         
+                        # Hitung metrik
+                        success_count = len(df_titik[df_titik['status_antaran'].str.contains('Selesai|Delivered', case=False, na=False)])
+                        failed_count = len(df_titik[df_titik['status_antaran'].str.contains('FAILEDTODELIVERED', case=False, na=False)])
+                        
                         m1, m2, m3 = st.columns(3)
                         m1.metric("Total Antaran", len(df_titik))
-                        success_count = len(df_titik[df_titik['status_antaran'].str.contains('Selesai|Delivered', case=False, na=False)])
                         m2.metric("Berhasil (Selesai)", success_count)
-                        m3.metric("Gagal / Proses", len(df_titik) - success_count)
+                        m3.metric("Gagal (Failed)", failed_count)
 
+                        # LOGIKA REKAPAN (FAILEDTODELIVERED = Gagal)
                         st.markdown("##### Resume per Produk")
-                        resume_produk = df_titik.groupby(['produk', 'status_antaran']).size().reset_index(name='Jumlah')
+                        df_resume = df_titik.copy()
+                        # Mapping status untuk rekapan
+                        df_resume['status_summary'] = df_resume['status_antaran'].apply(
+                            lambda x: "Gagal" if "FAILEDTODELIVERED" in str(x).upper() else x
+                        )
+                        
+                        resume_produk = df_resume.groupby(['produk', 'status_summary']).size().reset_index(name='Jumlah')
                         st.dataframe(resume_produk, use_container_width=True, hide_index=True)
 
                         st.markdown("##### Rincian Data")
@@ -236,11 +238,9 @@ def main_app():
                         st.warning(f"Tidak ada data titikan untuk petugas {selected_label} pada tanggal {selected_date}")
                 else:
                     st.info("Tidak ada data petugas pengantar yang tercatat memiliki titikan di kantor ini.")
-
         except Exception as e:
             st.error(f"Kesalahan Database: {e}")
 
-# --- JALANKAN APLIKASI ---
 if not st.session_state.logged_in:
     login_ui()
 else:
