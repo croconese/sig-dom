@@ -191,7 +191,7 @@ def main_app():
                                 
                                 folium.Marker(
                                     location=[row['latitude'], row['longitude']],
-                                    popup=f"Item: {row['connote']}<br>Penerima: {row['penerima']}",
+                                    popup=f"<b>Connote : </b> {row['connote']}<br>Penerima: {row['penerima']}",
                                     tooltip=f"{row['connote']}",
                                     icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')
                                 ).add_to(m_antaran)
@@ -200,7 +200,7 @@ def main_app():
 
                         with col_data:
                             st.subheader("Data Kiriman")
-                            st.metric("Total Titikan", len(df_titik))
+                            st.metric("Total Kiriman", len(df_titik))
                             # Menampilkan tabel ringkas
                             st.dataframe(
                                 df_titik[['connote', 'status_antaran', 'waktu_kejadian']], 
