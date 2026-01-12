@@ -142,25 +142,16 @@ def main_app():
                 list_pengantar = [p[0] for p in list_pengantar if p[0] is not None]
 
                 if list_pengantar:
+                    # Filter ditempatkan di atas peta
                     selected_pengantar = st.selectbox("Pilih ID Petugas:", list_pengantar)
 
-                    # 2. Query dengan nama kolom yang disesuaikan (barcode/no_resi)
-                    # Saya tambahkan alias 'connote' agar kode di bawahnya tetap konsisten
+                    # 2. Query Data
                     query_titik = text("""
                         SELECT 
-                            connote,
-                            produk,
-                            jenis_kiriman,
-                            status_antaran, 
-                            is_cod,
-                            nominal_cod,
-                            berat_kg,
-                            penerima,
-                            alamat_penerima,
-                            telp_penerima,
-                            kodepos_penerima,
-                            keterangan,
-                            waktu_kejadian, 
+                            connote, produk, jenis_kiriman, status_antaran, 
+                            is_cod, nominal_cod, berat_kg, penerima, 
+                            alamat_penerima, telp_penerima, kodepos_penerima, 
+                            keterangan, waktu_kejadian, 
                             ST_X(geom) as longitude, 
                             ST_Y(geom) as latitude
                         FROM titikan_antaran 
@@ -174,48 +165,53 @@ def main_app():
                     })
 
                     if not df_titik.empty:
-                        col_map, col_data = st.columns([2, 1])
+                        # Bagian 1: Peta (Lebar Penuh)
+                        st.subheader(f"Peta Sebaran: {selected_pengantar}")
+                        avg_lat = df_titik['latitude'].mean()
+                        avg_lon = df_titik['longitude'].mean()
+                        
+                        m_antaran = folium.Map(location=[avg_lat, avg_lon], zoom_start=14)
 
-                        with col_map:
-                            st.subheader(f"Peta Sebaran: {selected_pengantar}")
-                            avg_lat = df_titik['latitude'].mean()
-                            avg_lon = df_titik['longitude'].mean()
+                        for _, row in df_titik.iterrows():
+                            status_str = str(row['status_antaran']).upper()
+                            color_icon = "green" if "SELESAI" in status_str or "DELIVERED" in status_str else "orange"
                             
-                            m_antaran = folium.Map(location=[avg_lat, avg_lon], zoom_start=14)
+                            folium.Marker(
+                                location=[row['latitude'], row['longitude']],
+                                popup=f"<b>Connote : </b> {row['connote']}<br> <b> Penerima : </b> {row['penerima']} <br> <b> Produk : </b> {row['produk']} <br> <b> Status : </b> {row['status_antaran']}",
+                                tooltip=f"{row['connote']}",
+                                icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')
+                            ).add_to(m_antaran)
+                        
+                        st_folium(m_antaran, width="100%", height=500, key="map_riwayat_full")
 
-                            for _, row in df_titik.iterrows():
-                                # Logika warna: Hijau untuk sukses/delivered
-                                status_str = str(row['status_antaran']).upper()
-                                color_icon = "green" if "SELESAI" in status_str or "DELIVERED" in status_str else "orange"
-                                
-                                folium.Marker(
-                                    location=[row['latitude'], row['longitude']],
-                                    popup=f"<b>Connote : </b> {row['connote']}<br> <b> Penerima : </b>  {row['penerima']} <br> <b> Produk : </b>  {row['produk']}  <br> <b> Jenis : </b>  {row['jenis_kiriman']}  <br> <b> Berat : </b>  {row['berat_kg']} <br> <b> Waktu : </b>  {row['waktu_kejadian']} <br> <b> Status : </b>  {row['status_antaran']}",
-                                    tooltip=f"{row['connote']}",
-                                    icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')
-                                ).add_to(m_antaran)
-                            
-                            st_folium(m_antaran, width="100%", height=500, key="map_riwayat_new")
+                        st.markdown("---")
 
-                        with col_data:
-                            st.subheader("Data Kiriman")
-                            st.metric("Total Kiriman", len(df_titik))
-                            # Menampilkan tabel ringkas
-                            st.dataframe(
-                                df_titik[['connote', 'status_antaran', 'waktu_kejadian']], 
-                                use_container_width=True,
-                                hide_index=True
-                            )
+                        # Bagian 2: Data Riwayat (Di Bawah Peta)
+                        st.subheader("Rincian Data Kiriman")
+                        
+                        # Menampilkan metrik utama dalam kolom-kolom kecil
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("Total Kiriman", len(df_titik))
+                        m2.metric("Selesai (Success)", len(df_titik[df_titik['status_antaran'].str.contains('Selesai|Delivered', case=False)]))
+                        m3.metric("Gagal/Lainnya", len(df_titik) - len(df_titik[df_titik['status_antaran'].str.contains('Selesai|Delivered', case=False)]))
+
+                        # Tabel Detail dengan filter/sortir bawaan streamlit
+                        st.dataframe(
+                            df_titik[[
+                                'connote', 'produk', 'penerima', 'status_antaran', 
+                                'waktu_kejadian', 'alamat_penerima'
+                            ]], 
+                            use_container_width=True,
+                            hide_index=True
+                        )
                     else:
                         st.warning(f"Belum ada koordinat untuk petugas {selected_pengantar}")
                 else:
                     st.info("Tidak ada data petugas untuk kantor ini.")
 
         except Exception as e:
-            # Jika masih error kolom, tampilkan daftar kolom yang ada agar kita bisa perbaiki
             st.error(f"Terjadi kesalahan struktur tabel.")
-            if "column" in str(e):
-                st.info("Tips: Pastikan nama kolom di tabel 'titikan_antaran' adalah 'barcode', jika bukan silakan ganti di kode.")
             st.expander("Lihat Detail Error").write(e)
 
 # --- JALANKAN APLIKASI ---
