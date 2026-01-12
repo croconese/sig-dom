@@ -140,7 +140,7 @@ def main_app():
                 # Join dilakukan untuk memastikan petugas tersebut memang memiliki data di titikan_antaran
                 query_petugas = text("""
                     SELECT DISTINCT p.id_petugas, p.nama_petugas 
-                    FROM petugas_pengantar p
+                    FROM petugas_antaran p
                     JOIN titikan_antaran t ON p.id_petugas = t.id_petugas
                     WHERE p.id_kantor = :id_kantor
                 """)
