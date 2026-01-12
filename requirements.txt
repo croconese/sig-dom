@@ -1,7 +1,7 @@
 streamlit
 pandas
 sqlalchemy
-pg8000
+psycopg2-binary
 folium
 streamlit-folium
 python-dotenv
