@@ -36,13 +36,21 @@ if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 
 # --- FUNGSI LOGIN ---
+# --- FUNGSI LOGIN ---
 def login_ui():
-    c1, c2, c3 = st.columns([1, 1.2, 1])
+    # Membuat 3 kolom dengan perbandingan 1:1:1 atau 1:2:1
+    # Kolom tengah (c2) akan menjadi wadah konten agar presisi di tengah
+    c1, c2, c3 = st.columns([1, 2, 1]) 
+    
     with c2:
-        # Menambahkan Logo di Halaman Login
-        st.image("Logo Posind Biru.png", width=80, align="center") 
-        st.title("Login SIG-DOM")
-        st.subheader("PT Pos Indonesia (Persero)")
+        # Menampilkan logo di kolom tengah
+        # use_container_width=True memastikan logo mengikuti lebar kolom tengah
+        st.image("Logo Posind Biru.png", use_container_width=True, width=80) 
+        
+        # Menggunakan CSS sederhana untuk memastikan teks juga rata tengah
+        st.markdown("<h1 style='text-align: center;'>Login SIG-DOM</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>PT Pos Indonesia (Persero)</p>", unsafe_allow_html=True)
+        
         with st.form("login_form"):
             u = st.text_input("Username")
             p = st.text_input("Password", type="password")
