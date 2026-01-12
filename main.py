@@ -11,7 +11,6 @@ st.set_page_config(page_title="SIG-DOM POS", layout="wide", page_icon="🚚")
 
 @st.cache_resource
 def get_engine():
-    # Mengambil DB_URL dari Secrets Streamlit
     return create_engine(st.secrets["DB_URL"], pool_pre_ping=True)
 
 engine = get_engine()
@@ -27,7 +26,6 @@ VIBRANT_PALETTE = [
 ]
 
 def get_bright_color(kodepos):
-    """Memberikan warna konsisten berdasarkan kodepos"""
     try:
         random.seed(int(kodepos)) 
     except:
@@ -68,82 +66,36 @@ def login_ui():
 # --- MENU UTAMA ---
 def main_app():
     user = st.session_state.user_info
-    
-    # SIDEBAR NAVIGASI
     st.sidebar.title("SIG-DOM")
     st.sidebar.markdown(f"**📍 {user['nama']}**")
     st.sidebar.markdown("---")
     
-    menu = st.sidebar.selectbox("Pilih Menu:", [
-        "🗺️ Peta Wilayah Antaran", 
-        "📦 Data Riwayat Antaran", 
-    ])
+    menu = st.sidebar.selectbox("Pilih Menu:", ["🗺️ Peta Wilayah Antaran", "📦 Data Riwayat Antaran"])
     
-    st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.logged_in = False
         st.session_state.user_info = None
         st.rerun()
 
-    # --- KONTEN MENU: PETA WILAYAH ---
     if menu == "🗺️ Peta Wilayah Antaran":
         st.header("Visualisasi Spasial Wilayah Antaran")
         try:
             with engine.connect() as conn:
-                df = pd.read_sql(text("""
-                    SELECT kodepos, kecamatan, kelurahan, ST_AsGeoJSON(geom)::json as geo 
-                    FROM zona_antaran
-                """), conn)
-            
+                df = pd.read_sql(text("SELECT kodepos, kecamatan, kelurahan, ST_AsGeoJSON(geom)::json as geo FROM zona_antaran"), conn)
             if not df.empty:
                 m = folium.Map(location=[-6.9147, 107.6098], zoom_start=12)
                 for _, row in df.iterrows():
                     color = get_bright_color(row['kodepos'])
-                    folium.GeoJson(
-                        row['geo'],
-                        style_function=lambda x, color=color: {
-                            'fillColor': color,
-                            'color': 'white',
-                            'weight': 2,
-                            'fillOpacity': 0.7,
-                        },
-                        tooltip=folium.Tooltip(f"Kodepos : {row['kodepos']} <br>Kecamatan : {row['kecamatan']} <br> Kelurahan : {row['kelurahan']}")
-                    ).add_to(m)
-
+                    folium.GeoJson(row['geo'], style_function=lambda x, color=color: {'fillColor': color, 'color': 'white', 'weight': 2, 'fillOpacity': 0.7}, tooltip=folium.Tooltip(f"Kodepos : {row['kodepos']} <br>Kecamatan : {row['kecamatan']} <br> Kelurahan : {row['kelurahan']}")).add_to(m)
                 st_folium(m, width="100%", height=600)
-                
-                st.markdown("### 📋 Keterangan Warna")
-                cols = st.columns(5)
-                for idx, row in df.iterrows():
-                    with cols[idx % 5]:
-                        warna = get_bright_color(row['kodepos'])
-                        st.markdown(f"""
-                            <div style="background-color:{warna}; padding:10px; border-radius:5px; 
-                            text-align:center; color:white; font-weight:bold; text-shadow: 1px 1px 2px black;">
-                                {row['kodepos']}
-                            </div>
-                            <div style="text-align:center; font-size:12px; margin-top:5px;">
-                                <b>{row['kelurahan']}</b><br>{row['kecamatan']}
-                            </div>
-                            <br>
-                        """, unsafe_allow_html=True)
-            else:
-                st.info("Belum ada data geometri di database.")
         except Exception as e:
             st.error(f"Gagal memuat peta: {e}")
 
-    # --- KONTEN MENU: RIWAYAT ANTARAN ---
     elif menu == "📦 Data Riwayat Antaran":
         st.header("Data Riwayat Antaran")
         try:
             with engine.connect() as conn:
-                # 1. Ambil daftar petugas
-                query_petugas = text("""
-                    SELECT DISTINCT p.id_petugas, p.nama_petugas 
-                    FROM petugas_antaran p
-                    JOIN titikan_antaran t ON p.id_petugas = t.id_petugas
-                    WHERE p.id_kantor = :id_kantor
-                """)
+                query_petugas = text("SELECT DISTINCT p.id_petugas, p.nama_petugas FROM petugas_antaran p JOIN titikan_antaran t ON p.id_petugas = t.id_petugas WHERE p.id_kantor = :id_kantor")
                 res_petugas = conn.execute(query_petugas, {"id_kantor": user['id']}).fetchall()
                 dict_petugas = {f"{p[0]} - {p[1]}": p[0] for p in res_petugas}
 
@@ -155,13 +107,11 @@ def main_app():
                     with col_f2:
                         selected_date = st.date_input("Pilih Tanggal Kiriman:", datetime.now())
 
-                    # 2. Query data titikan
                     query_titik = text("""
                         SELECT connote, produk, status_antaran, penerima, alamat_penerima, waktu_kejadian, keterangan,
                                ST_X(geom) as longitude, ST_Y(geom) as latitude
                         FROM titikan_antaran 
                         WHERE id_petugas = :petugas AND id_kantor = :id_kantor AND DATE(waktu_kejadian) = :tgl
-                        ORDER BY waktu_kejadian DESC
                     """)
                     df_titik = pd.read_sql(query_titik, conn, params={"petugas": selected_id, "id_kantor": user['id'], "tgl": selected_date})
 
@@ -170,37 +120,47 @@ def main_app():
                         m_antaran = folium.Map(location=[df_titik['latitude'].mean(), df_titik['longitude'].mean()], zoom_start=14)
                         for _, row in df_titik.iterrows():
                             status_up = str(row['status_antaran']).upper()
-                            # Warna Marker
-                            if status_up == "DELIVERED": color_icon = "green"
-                            elif "FAILED" in status_up: color_icon = "red"
-                            else: color_icon = "orange"
-                            
-                            popup_html = f"<b>{row['connote']}</b><br>{row['penerima']}<br>Status: {row['status_antaran']}"
-                            folium.Marker([row['latitude'], row['longitude']], popup=popup_html, icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')).add_to(m_antaran)
-                        
+                            color_icon = "green" if status_up == "DELIVERED" else "red" if "FAILED" in status_up else "orange"
+                            folium.Marker([row['latitude'], row['longitude']], tooltip=f"{row['connote']}", icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')).add_to(m_antaran)
                         st_folium(m_antaran, width="100%", height=500, key=f"map_{selected_id}_{selected_date}")
 
-                        # --- RESUME & RINCIAN ---
+                        # --- RESUME ---
                         st.markdown("---")
                         st.subheader(f"📊 Resume & Rincian - {selected_date.strftime('%d/%m/%Y')}")
                         
-                        # Hitung Metrik
+                        total_ant = len(df_titik)
                         success_count = len(df_titik[df_titik['status_antaran'].str.upper() == "DELIVERED"])
                         failed_count = len(df_titik[df_titik['status_antaran'].str.upper().str.contains("FAILED", na=False)])
                         
-                        m1, m2, m3 = st.columns(3)
-                        m1.metric("Total Antaran", len(df_titik))
-                        m2.metric("Berhasil (DELIVERED)", success_count)
-                        m3.metric("Gagal (FAILED)", failed_count)
+                        # Kalkulasi Persentase Global
+                        p_success = (success_count / total_ant * 100) if total_ant > 0 else 0
+                        p_failed = (failed_count / total_ant * 100) if total_ant > 0 else 0
 
-                        # Tabel Resume per Produk
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("Total Antaran", total_ant)
+                        m2.metric("Berhasil (DELIVERED)", f"{success_count} ({p_success:.1f}%)")
+                        m3.metric("Gagal (FAILED)", f"{failed_count} ({p_failed:.1f}%)")
+
+                        # Tabel Resume per Produk dengan Persentase
                         st.markdown("##### Resume per Produk")
                         df_res = df_titik.copy()
                         df_res['Berhasil'] = df_res['status_antaran'].apply(lambda x: 1 if str(x).upper() == "DELIVERED" else 0)
                         df_res['Gagal'] = df_res['status_antaran'].apply(lambda x: 1 if "FAILED" in str(x).upper() else 0)
                         
-                        resume_tab = df_res.groupby('produk').agg({'Berhasil': 'sum', 'Gagal': 'sum', 'connote': 'count'}).reset_index()
+                        resume_tab = df_res.groupby('produk').agg({
+                            'Berhasil': 'sum', 
+                            'Gagal': 'sum', 
+                            'connote': 'count'
+                        }).reset_index()
+                        
                         resume_tab.columns = ['Produk', 'Berhasil', 'Gagal', 'Jumlah']
+                        
+                        # Tambahkan kolom Prosentase di Tabel
+                        resume_tab['% Sukses'] = (resume_tab['Berhasil'] / resume_tab['Jumlah'] * 100).map('{:.1f}%'.format)
+                        resume_tab['% Gagal'] = (resume_tab['Gagal'] / resume_tab['Jumlah'] * 100).map('{:.1f}%'.format)
+                        
+                        # Susun ulang kolom agar lebih rapi
+                        resume_tab = resume_tab[['Produk', 'Berhasil', '% Sukses', 'Gagal', '% Gagal', 'Jumlah']]
                         st.dataframe(resume_tab, use_container_width=True, hide_index=True)
 
                         st.markdown("##### Rincian Data")
@@ -208,11 +168,10 @@ def main_app():
                     else:
                         st.warning(f"Tidak ada data antaran untuk petugas {selected_label} pada tanggal {selected_date}")
                 else:
-                    st.info("Petugas tidak ditemukan di kantor ini.")
+                    st.info("Petugas tidak ditemukan.")
         except Exception as e:
             st.error(f"Error Database: {e}")
 
-# --- JALANKAN APLIKASI ---
 if not st.session_state.logged_in:
     login_ui()
 else:
