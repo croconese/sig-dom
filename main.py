@@ -136,60 +136,88 @@ def main_app():
         
         try:
             with engine.connect() as conn:
-                # 1. Ambil daftar pengantar unik (Sesuaikan nama tabel ke titikan_antaran)
+                # 1. Ambil daftar pengantar (id_petugas)
                 query_pengantar = text("SELECT DISTINCT id_petugas FROM titikan_antaran WHERE id_kantor = :id_kantor")
                 list_pengantar = conn.execute(query_pengantar, {"id_kantor": user['id']}).fetchall()
                 list_pengantar = [p[0] for p in list_pengantar if p[0] is not None]
 
                 if list_pengantar:
-                    selected_pengantar = st.selectbox("Pilih ID Petugas / Pengantar:", list_pengantar)
+                    selected_pengantar = st.selectbox("Pilih ID Petugas:", list_pengantar)
 
-                    # 2. Ambil data koordinat dari kolom 'geom' menggunakan PostGIS
+                    # 2. Query dengan nama kolom yang disesuaikan (barcode/no_resi)
+                    # Saya tambahkan alias 'connote' agar kode di bawahnya tetap konsisten
                     query_titik = text("""
-                        SELECT id_resi, status_antaran, waktu_kejadian, penerima, alamat_penerima,
-                               ST_X(geom) as longitude, ST_Y(geom) as latitude
+                        SELECT 
+                            connote,
+                            produk,
+                            jenis_kiriman,
+                            status_antaran, 
+                            is_cod,
+                            nominal_cod,
+                            berat_kg,
+                            penerima,
+                            alamat_penerima,
+                            telp_penerima,
+                            kodepos_penerima,
+                            keterangan,
+                            waktu_kejadian, 
+                            penerima, 
+                            ST_X(geom) as longitude, 
+                            ST_Y(geom) as latitude
                         FROM titikan_antaran 
                         WHERE id_petugas = :petugas AND id_kantor = :id_kantor
                         ORDER BY waktu_kejadian DESC
                     """)
-                    df_titik = pd.read_sql(query_titik, conn, params={"petugas": selected_pengantar, "id_kantor": user['id']})
+                    
+                    df_titik = pd.read_sql(query_titik, conn, params={
+                        "petugas": selected_pengantar, 
+                        "id_kantor": user['id']
+                    })
 
                     if not df_titik.empty:
                         col_map, col_data = st.columns([2, 1])
 
                         with col_map:
-                            st.subheader(f"Peta Titikan: {selected_pengantar}")
-                            # Menghitung rata-rata posisi untuk titik tengah peta
+                            st.subheader(f"Peta Sebaran: {selected_pengantar}")
                             avg_lat = df_titik['latitude'].mean()
                             avg_lon = df_titik['longitude'].mean()
                             
                             m_antaran = folium.Map(location=[avg_lat, avg_lon], zoom_start=14)
 
-                            # Menambahkan marker untuk setiap titikan
                             for _, row in df_titik.iterrows():
-                                # Hijau jika status sukses, Merah jika selain itu
-                                color_icon = "green" if "Selesai" in str(row['status_antaran']) else "red"
+                                # Logika warna: Hijau untuk sukses/delivered
+                                status_str = str(row['status_antaran']).upper()
+                                color_icon = "green" if "SELESAI" in status_str or "DELIVERED" in status_str else "orange"
                                 
                                 folium.Marker(
                                     location=[row['latitude'], row['longitude']],
-                                    popup=f"Resi: {row['id_resi']}<br>Penerima: {row['penerima']}",
-                                    tooltip=f"{row['id_resi']} ({row['status_antaran']})",
-                                    icon=folium.Icon(color=color_icon, icon='info-sign')
+                                    popup=f"Item: {row['connote']}<br>Penerima: {row['penerima']}",
+                                    tooltip=f"{row['connote']}",
+                                    icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')
                                 ).add_to(m_antaran)
                             
-                            st_folium(m_antaran, width="100%", height=500, key="map_riwayat")
+                            st_folium(m_antaran, width="100%", height=500, key="map_riwayat_new")
 
                         with col_data:
-                            st.subheader("Ringkasan")
-                            st.metric("Total Kiriman", len(df_titik))
-                            st.dataframe(df_titik[['id_resi', 'status_antaran', 'waktu_kejadian']], use_container_width=True)
+                            st.subheader("Data Kiriman")
+                            st.metric("Total Titikan", len(df_titik))
+                            # Menampilkan tabel ringkas
+                            st.dataframe(
+                                df_titik[['connote', 'status_antaran', 'waktu_kejadian']], 
+                                use_container_width=True,
+                                hide_index=True
+                            )
                     else:
-                        st.warning(f"Tidak ada data titikan untuk petugas {selected_pengantar}")
+                        st.warning(f"Belum ada koordinat untuk petugas {selected_pengantar}")
                 else:
-                    st.info("Belum ada data riwayat antaran untuk kantor ini.")
+                    st.info("Tidak ada data petugas untuk kantor ini.")
 
         except Exception as e:
-            st.error(f"Gagal memuat riwayat: {e}")
+            # Jika masih error kolom, tampilkan daftar kolom yang ada agar kita bisa perbaiki
+            st.error(f"Terjadi kesalahan struktur tabel.")
+            if "column" in str(e):
+                st.info("Tips: Pastikan nama kolom di tabel 'titikan_antaran' adalah 'barcode', jika bukan silakan ganti di kode.")
+            st.expander("Lihat Detail Error").write(e)
 
 # --- JALANKAN APLIKASI ---
 if not st.session_state.logged_in:
