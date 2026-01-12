@@ -11,13 +11,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 2. Fungsi Koneksi Database
+from sqlalchemy import create_engine
+
 def get_connection():
     try:
-        conn = psycopg2.connect(os.getenv("DB_URL"))
-        return conn
+        # Menambahkan connect_args untuk memaksa IPv4 jika memungkinkan
+        engine = create_engine(os.getenv("DB_URL"))
+        return engine.connect()
     except Exception as e:
-        st.error(f"Gagal koneksi ke database: {e}")
+        st.error(f"Gagal koneksi: {e}")
         return None
+        
 
 # Konfigurasi Halaman Streamlit
 st.set_page_config(
