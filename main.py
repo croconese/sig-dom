@@ -36,25 +36,34 @@ if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 
 # --- FUNGSI LOGIN ---
-# --- FUNGSI LOGIN ---
 def login_ui():
-    # Membuat 3 kolom dengan perbandingan 1:1:1 atau 1:2:1
-    # Kolom tengah (c2) akan menjadi wadah konten agar presisi di tengah
-    c1, c2, c3 = st.columns([1, 2, 1]) 
+    # Membuat 3 kolom agar form berada di tengah
+    # Kolom kiri dan kanan (c1 & c3) berfungsi sebagai padding/spasi
+    c1, c2, c3 = st.columns([1, 1.5, 1]) 
     
     with c2:
-        # Menampilkan logo di kolom tengah
-        # use_container_width=True memastikan logo mengikuti lebar kolom tengah
-        st.image("Logo Posind Biru.png", use_container_width=True, width=80) 
+        # Menambahkan spasi kosong agar tidak terlalu mepet ke atas
+        st.markdown("<br><br>", unsafe_allow_html=True)
         
-        # Menggunakan CSS sederhana untuk memastikan teks juga rata tengah
-        st.markdown("<h1 style='text-align: center;'>Login SIG-DOM</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center;'>PT Pos Indonesia (Persero)</p>", unsafe_allow_html=True)
+        # Mengatur posisi gambar ke tengah secara manual dengan kolom internal atau CSS
+        # Ukuran ideal untuk logo instansi di web biasanya antara 180px - 250px
+        st.image("Logo Posind Biru.png", width=220) 
+        
+        # Judul dengan alignment center
+        st.markdown("""
+            <h2 style='text-align: center; margin-bottom: 0;'>SIG-DOM Dashboard</h2>
+            <p style='text-align: center; color: gray;'>PT Pos Indonesia (Persero)</p>
+            <br>
+        """, unsafe_allow_html=True)
         
         with st.form("login_form"):
             u = st.text_input("Username")
             p = st.text_input("Password", type="password")
-            if st.form_submit_button("Masuk", use_container_width=True):
+            
+            # Tombol login yang memenuhi lebar kolom
+            submit = st.form_submit_button("MASUK", use_container_width=True)
+            
+            if submit:
                 try:
                     with engine.connect() as conn:
                         query = text("SELECT id_kantor, nama_kantor FROM users_dc WHERE username = :u AND password_hash = :p")
