@@ -3,25 +3,23 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 import os
 
-# 1. Inisialisasi Halaman
+# 1. PAGE CONFIG
 st.set_page_config(page_title="SIG-DOM POS", layout="wide")
 
-# 2. Fungsi Engine dengan pool_pre_ping
+# 2. DATABASE ENGINE
 @st.cache_resource
 def get_engine():
-    # Pastikan mengambil dari st.secrets agar sinkron dengan Streamlit Cloud
     if "DB_URL" not in st.secrets:
-        st.error("Konfigurasi DB_URL hilang di Secrets!")
+        st.error("Konfigurasi DB_URL tidak ditemukan di Secrets!")
         return None
     
     db_url = st.secrets["DB_URL"]
     try:
-        # pool_pre_ping=True akan mengetes koneksi sebelum digunakan
-        # Sangat krusial untuk mencegah 'OperationalError' di server Cloud
+        # Gunakan koneksi langsung dengan timeout agar tidak gantung
         return create_engine(
             db_url, 
             pool_pre_ping=True,
-            pool_recycle=300
+            connect_args={'connect_timeout': 10}
         )
     except Exception as e:
         st.error(f"Gagal Inisialisasi Engine: {e}")
@@ -29,20 +27,37 @@ def get_engine():
 
 engine = get_engine()
 
-# 3. UI Utama
+# 3. UI UTAMA
 st.title("🚚 SIG-DOM PT POS INDONESIA")
+st.markdown("---")
 
 if engine:
     try:
-        # Tes koneksi sederhana
+        # Mencoba melakukan koneksi
         with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-            st.success("✅ Koneksi Berhasil! Database Terhubung.")
+            # Tes query sederhana
+            result = conn.execute(text("SELECT 1")).fetchone()
             
-            # Tampilkan menu setelah sukses login/koneksi
-            st.info("Sistem siap digunakan. Silakan akses menu di sidebar.")
+            if result:
+                st.success("✅ KONEKSI BERHASIL! Database Supabase terhubung.")
+                
+                # Cek apakah tabel user sudah ada
+                try:
+                    user_check = conn.execute(text("SELECT COUNT(*) FROM users_dc")).fetchone()
+                    st.info(f"Tabel 'users_dc' ditemukan dengan {user_check[0]} data.")
+                except Exception:
+                    st.warning("⚠️ Koneksi OK, tapi tabel 'users_dc' belum dibuat. Silakan jalankan script SQL di Supabase.")
             
     except Exception as e:
-        st.error("❌ Gagal Terhubung ke Database.")
-        st.warning(f"Detail Error: {str(e)}")
-        st.info("Tips: Pastikan Project ID di username sudah benar (postgres.vlsyyhlsvwjavfrzruyd)")
+        st.error("❌ GAGAL TERHUBUNG")
+        st.code(str(e)) # Menampilkan error mentah agar mudah diidentifikasi
+        
+        st.markdown("""
+        ### Cara Memperbaiki:
+        1. Pastikan **Password** di Secrets benar.
+        2. Pastikan di Supabase (Settings > Database), **IPv4** sudah diizinkan (biasanya default).
+        3. Jika masih gagal, coba ganti port ke `5432` di URL Secrets.
+        """)
+
+# FOOTER
+st.caption("SIG-DOM v1.4 | Debug Mode")
