@@ -209,7 +209,7 @@ def main_app():
                         st.subheader(f"📊 Resume & Rincian - {selected_date.strftime('%d/%m/%Y')}")
                         
                         # Hitung metrik
-                        success_count = len(df_titik[df_titik['status_antaran'].str.contains('Selesai|Delivered', case=False, na=False)])
+                        success_count = len(df_titik[df_titik['status_antaran'].str.contains('DELIVERED', case=False, na=False)])
                         failed_count = len(df_titik[df_titik['status_antaran'].str.contains('FAILEDTODELIVERED', case=False, na=False)])
                         
                         m1, m2, m3 = st.columns(3)
