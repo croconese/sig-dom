@@ -78,11 +78,13 @@ def login_ui():
                     st.error(f"Error Database: {e}")
 
 # --- MENU UTAMA ---
+# --- MENU UTAMA ---
 def main_app():
     user = st.session_state.user_info
     
     # SIDEBAR NAVIGASI
-    st.sidebar.image("Logo Posind Biru.png", use_container_width=True, width=20) # Logo di Sidebar
+    # use_container_width dihapus, width diatur ke 80 agar proporsional
+    st.sidebar.image("Logo Posind Biru.png", width=80) 
     st.sidebar.markdown("---")
     st.sidebar.title("SIG-DOM Dashboard")
     st.sidebar.info(f"📍 {user['nama']}")
