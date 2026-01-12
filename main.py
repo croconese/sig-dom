@@ -40,7 +40,7 @@ def login_ui():
     c1, c2, c3 = st.columns([1, 1.2, 1])
     with c2:
         # Menambahkan Logo di Halaman Login
-        st.image("Logo Posind Biru.png", width=60) 
+        st.image("Logo Posind Biru.png", width=80, align="center") 
         st.title("Login SIG-DOM")
         st.subheader("PT Pos Indonesia (Persero)")
         with st.form("login_form"):
