@@ -24,7 +24,7 @@ if 'user_info' not in st.session_state:
 def login_ui():
     c1, c2, c3 = st.columns([1, 1.2, 1])
     with c2:
-        st.image("https://upload.wikimedia.org/wikipedia/id/thumb/0/00/Pos_Indonesia_2012.svg/1200px-Pos_Indonesia_2012.svg.png", width=120)
+        st.image("Logo Posind Biru.png", width=120)
         st.title("Login SIG-DOM")
         with st.form("login_form"):
             u = st.text_input("Username")
