@@ -15,12 +15,8 @@ def get_engine():
 
 engine = get_engine()
 
-# --- PALET WARNA (Global) ---
-VIBRANT_PALETTE = [
-    "#FF5733", "#33FF57", "#3357FF", "#F333FF", "#FF33A1",
-    "#33FFF5", "#FFD700", "#ADFF2F", "#FF8C00", "#00FF00",
-    "#00BFFF", "#FF00FF", "#7B68EE", "#FFA07A", "#00FA9A"
-]
+# --- PALET WARNA ---
+VIBRANT_PALETTE = ["#FF5733", "#33FF57", "#3357FF", "#F333FF", "#FF33A1", "#33FFF5", "#FFD700"]
 
 def get_bright_color(kodepos):
     try: random.seed(int(kodepos)) 
@@ -81,27 +77,20 @@ def main_app():
                 m = folium.Map(location=[-6.9147, 107.6098], zoom_start=12)
                 for _, row in df.iterrows():
                     color = get_bright_color(row['kodepos'])
-                    # TOOLTIP & POPUP WILAYAH
                     folium.GeoJson(
                         row['geo'],
-                        style_function=lambda x, color=color: {'fillColor': color, 'color': 'white', 'weight': 2, 'fillOpacity': 0.7},
-                        tooltip=folium.Tooltip(f"<b>{row['kelurahan']}</b><br>Kodepos: {row['kodepos']}"),
-                        popup=folium.Popup(f"""
-                            <b>Detail Wilayah</b><br>
-                            Kecamatan: {row['kecamatan']}<br>
-                            Kelurahan: {row['kelurahan']}<br>
-                            Kodepos: {row['kodepos']}<br>
-                            Luas Area: {row['luas_km2']:.2f} km²
-                        """, max_width=200)
+                        style_function=lambda x, color=color: {'fillColor': color, 'color': 'white', 'weight': 2, 'fillOpacity': 0.6},
+                        tooltip=folium.Tooltip(f"<b>{row['kelurahan']}</b> ({row['kodepos']})")
                     ).add_to(m)
                 st_folium(m, width="100%", height=600)
                 
-                st.markdown("### 📋 Keterangan Wilayah & Luas Area")
+                # Keterangan Warna di Bawah Map
+                st.markdown("### 📋 Keterangan Wilayah")
                 cols = st.columns(5)
                 for idx, row in df.iterrows():
                     with cols[idx % 5]:
                         warna = get_bright_color(row['kodepos'])
-                        st.markdown(f"""<div style="background-color:{warna}; padding:10px; border-radius:5px; text-align:center; color:white; font-weight:bold;">{row['kodepos']}</div><div style="text-align:center; font-size:12px; margin-top:5px;"><b>{row['kelurahan']}</b><br>{row['kecamatan']}<br><b>{row['luas_km2']:.2f} km²</b></div><br>""", unsafe_allow_html=True)
+                        st.markdown(f"""<div style="background-color:{warna}; padding:10px; border-radius:5px; text-align:center; color:white; font-weight:bold;">{row['kodepos']}</div><div style="text-align:center; font-size:12px; margin-top:5px;"><b>{row['kelurahan']}</b><br>{row['luas_km2']:.2f} km²</div><br>""", unsafe_allow_html=True)
         except Exception as e: st.error(f"Error: {e}")
 
     # --- MENU: DATA RIWAYAT ---
@@ -131,67 +120,81 @@ def main_app():
                     df_titik = pd.read_sql(query_titik, conn, params={"petugas": selected_id, "id_kantor": user['id'], "tgl": selected_date})
 
                     if not df_titik.empty:
-                        # Peta
+                        df_titik['waktu_kejadian'] = pd.to_datetime(df_titik['waktu_kejadian'])
+                        
+                        # Hitung jeda waktu antar titik (Durasi Perjalanan)
+                        df_titik['jeda'] = df_titik['waktu_kejadian'].diff().dt.total_seconds() / 60
+                        df_titik['jeda'] = df_titik['jeda'].fillna(0)
+
                         m_antaran = folium.Map(location=[df_titik['latitude'].mean(), df_titik['longitude'].mean()], zoom_start=14)
-                        for _, row in df_titik.iterrows():
+                        
+                        for i, row in df_titik.iterrows():
                             status_up = str(row['status_antaran']).upper()
                             color_icon = "green" if status_up == "DELIVERED" else "red" if "FAILED" in status_up else "orange"
+                            badge_color = "#28a745" if status_up == "DELIVERED" else "#dc3545"
                             
-                            # TOOLTIP & POPUP TITIK ANTAR
+                            # --- TOOLTIP CUSTOM (HOVER) ---
+                            tooltip_html = f"""
+                            <div style="font-family: Arial; width: 200px;">
+                                <b style="color: #003366;">{row['connote']}</b><br>
+                                👤 {row['penerima']}<br>
+                                📦 {row['produk']}
+                            </div>
+                            """
+                            
+                            # --- POPUP CUSTOM (CLICK) ---
+                            popup_html = f"""
+                            <div style="width: 250px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                <div style="background-color: #003366; color: white; padding: 8px; border-radius: 5px 5px 0 0; font-weight: bold; text-align: center;">
+                                    RINCIAN ANTARAN
+                                </div>
+                                <div style="padding: 10px; border: 1px solid #ddd; border-top: none; background-color: #f9f9f9;">
+                                    <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+                                        <tr><td><b>Connote</b></td><td>: {row['connote']}</td></tr>
+                                        <tr><td><b>Produk</b></td><td>: {row['produk']}</td></tr>
+                                        <tr><td><b>Penerima</b></td><td>: {row['penerima']}</td></tr>
+                                        <tr><td><b>Alamat</b></td><td>: {row['alamat_penerima'] if row['alamat_penerima'] else '-'}</td></tr>
+                                        <tr><td><b>Waktu</b></td><td>: {row['waktu_kejadian'].strftime('%H:%M:%S')}</td></tr>
+                                        <tr><td><b>Jeda</b></td><td>: <span style="color: blue;">{int(row['jeda'])} Menit</span></td></tr>
+                                    </table>
+                                    <div style="margin-top: 10px; text-align: center;">
+                                        <span style="background-color: {badge_color}; color: white; padding: 3px 8px; border-radius: 10px; font-size: 10px; font-weight: bold;">
+                                            {status_up}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            """
+                            
                             folium.Marker(
-                                [row['latitude'], row['longitude']], 
-                                tooltip=f"{row['connote']} - {row['penerima']}",
-                                popup=folium.Popup(f"""
-                                    <b>Rincian Kiriman</b><br>
-                                    Connote: {row['connote']}<br>
-                                    Produk: {row['produk']}<br>
-                                    Penerima: {row['penerima']}<br>
-                                    Status: {row['status_antaran']}<br>
-                                    Waktu: {row['waktu_kejadian'].strftime('%H:%M:%S')}
-                                """, max_width=200),
+                                [row['latitude'], row['longitude']],
+                                tooltip=folium.Tooltip(tooltip_html),
+                                popup=folium.Popup(popup_html, max_width=300),
                                 icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')
                             ).add_to(m_antaran)
-                        st_folium(m_antaran, width="100%", height=400, key=f"map_{selected_id}_{selected_date}")
 
-                        # --- ANALISIS WAKTU ---
+                        st_folium(m_antaran, width="100%", height=450, key=f"map_{selected_id}_{selected_date}")
+
+                        # --- RESUME AREA (Waktu & Persentase) ---
                         st.markdown("---")
-                        st.subheader("⏱️ Resume Efektivitas Waktu")
-                        df_titik['waktu_kejadian'] = pd.to_datetime(df_titik['waktu_kejadian'])
-                        durasi = df_titik['waktu_kejadian'].max() - df_titik['waktu_kejadian'].min()
-                        total_menit = durasi.total_seconds() / 60
-                        rata_rata = total_menit / len(df_titik) if len(df_titik) > 0 else 0
-
                         c1, c2, c3, c4 = st.columns(4)
+                        durasi_total = (df_titik['waktu_kejadian'].max() - df_titik['waktu_kejadian'].min()).total_seconds() / 60
                         c1.metric("Mulai", df_titik['waktu_kejadian'].min().strftime('%H:%M'))
                         c2.metric("Selesai", df_titik['waktu_kejadian'].max().strftime('%H:%M'))
-                        c3.metric("Total Durasi", f"{int(total_menit//60)}j {int(total_menit%60)}m")
-                        c4.metric("Rata-rata/Titik", f"{rata_rata:.1f} Menit")
+                        c3.metric("Durasi Operasi", f"{int(durasi_total//60)}j {int(durasi_total%60)}m")
+                        c4.metric("Avg Speed/Titik", f"{(durasi_total/len(df_titik)):.1f} Menit")
 
-                        # --- RESUME KIRIMAN ---
                         st.markdown("---")
-                        st.subheader(f"📊 Resume Performa - {selected_date.strftime('%d/%m/%Y')}")
                         total_k = len(df_titik)
                         berhasil_k = len(df_titik[df_titik['status_antaran'].str.upper() == "DELIVERED"])
-                        gagal_k = len(df_titik[df_titik['status_antaran'].str.upper().str.contains("FAILED", na=False)])
+                        gagal_k = total_k - berhasil_k
                         
                         m1, m2, m3 = st.columns(3)
                         m1.metric("Total Kiriman", total_k)
                         m2.metric("Berhasil (DELIVERED)", berhasil_k, f"{(berhasil_k/total_k*100):.1f}%")
                         m3.metric("Gagal (FAILED)", gagal_k, f"-{(gagal_k/total_k*100):.1f}%", delta_color="inverse")
 
-                        # Tabel Resume per Produk
-                        st.markdown("##### Resume per Produk")
-                        df_res = df_titik.copy()
-                        df_res['Berhasil'] = df_res['status_antaran'].apply(lambda x: 1 if str(x).upper() == "DELIVERED" else 0)
-                        df_res['Gagal'] = df_res['status_antaran'].apply(lambda x: 1 if "FAILED" in str(x).upper() else 0)
-                        resume_prod = df_res.groupby('produk').agg({'Berhasil': 'sum', 'Gagal': 'sum', 'connote': 'count'}).reset_index()
-                        resume_prod.columns = ['Produk', 'Berhasil', 'Gagal', 'Jumlah']
-                        resume_prod['% Berhasil'] = (resume_prod['Berhasil'] / resume_prod['Jumlah'] * 100).map('{:.1f}%'.format)
-                        resume_prod['% Gagal'] = (resume_prod['Gagal'] / resume_prod['Jumlah'] * 100).map('{:.1f}%'.format)
-                        st.dataframe(resume_prod[['Produk', 'Berhasil', '% Berhasil', 'Gagal', '% Gagal', 'Jumlah']], use_container_width=True, hide_index=True)
-
-                        st.markdown("##### Rincian Data")
-                        st.dataframe(df_titik[['connote', 'produk', 'penerima', 'status_antaran', 'waktu_kejadian']], use_container_width=True, hide_index=True)
+                        st.dataframe(df_titik[['connote', 'produk', 'penerima', 'status_antaran', 'waktu_kejadian', 'jeda']].rename(columns={'jeda': 'Jeda (Mnt)'}), use_container_width=True, hide_index=True)
                     else: st.warning("Data tidak ditemukan.")
         except Exception as e: st.error(f"Error: {e}")
 
