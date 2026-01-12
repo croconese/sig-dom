@@ -131,11 +131,18 @@ def main_app():
                     df_titik = pd.read_sql(query_titik, conn, params={"petugas": selected_id, "id_kantor": user['id'], "tgl": selected_date})
 
                     if not df_titik.empty:
-                        # Peta
+                        df_titik['waktu_kejadian'] = pd.to_datetime(df_titik['waktu_kejadian'])
+                        
+                        # Hitung jeda waktu antar titik (Durasi Perjalanan)
+                        df_titik['jeda'] = df_titik['waktu_kejadian'].diff().dt.total_seconds() / 60
+                        df_titik['jeda'] = df_titik['jeda'].fillna(0)
+
                         m_antaran = folium.Map(location=[df_titik['latitude'].mean(), df_titik['longitude'].mean()], zoom_start=14)
-                        for _, row in df_titik.iterrows():
+                        
+                        for i, row in df_titik.iterrows():
                             status_up = str(row['status_antaran']).upper()
                             color_icon = "green" if status_up == "DELIVERED" else "red" if "FAILED" in status_up else "orange"
+                            badge_color = "#28a745" if status_up == "DELIVERED" else "#dc3545"
                             
                             # --- TOOLTIP CUSTOM (HOVER) ---
                             tooltip_html = f"""
