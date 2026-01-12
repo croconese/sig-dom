@@ -78,26 +78,35 @@ def main_app():
         st.header("Visualisasi Spasial Wilayah (Warna Cerah)")
         
         # 1. Fungsi dengan palet warna cerah & vibrant
-        def get_bright_color(kodepos):
-            # Palet warna cerah (Bright Palette)
-            bright_colors = [
-                '#FF5733', # Orange-Red
-                '#33FF57', # Neon Green
-                '#3357FF', # Royal Blue
-                '#F333FF', # Magenta
-                '#FF33A1', # Hot Pink
-                '#33FFF5', # Cyan/Aqua
-                '#FFD700', # Gold
-                '#ADFF2F', # Green Yellow
-                '#FF8C00', # Dark Orange
-                '#00FF00', # Pure Lime
-                '#00BFFF', # Deep Sky Blue
-                '#FF00FF', # Fuchsia
-                '#7B68EE', # Medium Slate Blue
-                '#FFA07A'  # Light Salmon
-            ]
-            index = hash(str(kodepos)) % len(bright_colors)
-            return bright_colors[index]
+        # 1. Definisi 30 warna vibrant (di luar fungsi agar tidak dibuat ulang setiap saat)
+VIBRANT_PALETTE = [
+    "#FF5733", "#33FF57", "#3357FF", "#F333FF", "#FF33A1",
+    "#33FFF5", "#FFD700", "#ADFF2F", "#FF8C00", "#00FF00",
+    "#00BFFF", "#FF00FF", "#7B68EE", "#FFA07A", "#00FA9A",
+    "#FF1493", "#1E90FF", "#FFFF00", "#FF4500", "#8A2BE2",
+    "#00CED1", "#9ACD32", "#FF6347", "#40E0D0", "#EE82EE",
+    "#00FF7F", "#4169E1", "#D2691E", "#32CD32", "#FF69B4"
+]
+
+# Opsional: Jika ingin benar-benar unik dan tidak ada warna yang sama muncul dua kali
+# dalam satu sesi, kita bisa membuat salinan untuk "diambil" satu per satu.
+available_colors = VIBRANT_PALETTE.copy()
+random.shuffle(available_colors)
+
+def get_bright_color(kodepos):
+    """
+    Fungsi ini sekarang akan memberikan warna acak yang berbeda 
+    setiap kali dipanggil, tanpa mempedulikan nilai kodepos.
+    """
+    global available_colors
+    
+    # Jika stok warna habis, isi ulang dan acak lagi
+    if not available_colors:
+        available_colors = VIBRANT_PALETTE.copy()
+        random.shuffle(available_colors)
+    
+    # Ambil satu warna dan hapus dari daftar agar tidak kembar dalam satu putaran
+    return available_colors.pop()
 
         try:
             with engine.connect() as conn:
