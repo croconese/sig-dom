@@ -75,21 +75,30 @@ def main_app():
         st.line_chart(chart_data)
 
     elif menu == "🗺️ Peta Wilayah Antaran":
-        st.header("Visualisasi Spasial Wilayah per Kodepos")
+        st.header("Visualisasi Spasial Wilayah (Warna Cerah)")
         
-        # 1. Fungsi untuk menentukan warna unik berdasarkan kodepos
-        def get_color(kodepos):
-            # Daftar warna yang kontras
-            colors = [
-                'red', 'blue', 'green', 'purple', 'orange', 'darkred', 
-                'lightred', 'beige', 'darkblue', 'darkgreen', 'cadetblue', 
-                'darkpurple', 'pink', 'lightblue', 'lightgreen', 'black'
+        # 1. Fungsi dengan palet warna cerah & vibrant
+        def get_bright_color(kodepos):
+            # Palet warna cerah (Bright Palette)
+            bright_colors = [
+                '#FF5733', # Orange-Red
+                '#33FF57', # Neon Green
+                '#3357FF', # Royal Blue
+                '#F333FF', # Magenta
+                '#FF33A1', # Hot Pink
+                '#33FFF5', # Cyan/Aqua
+                '#FFD700', # Gold
+                '#ADFF2F', # Green Yellow
+                '#FF8C00', # Dark Orange
+                '#00FF00', # Pure Lime
+                '#00BFFF', # Deep Sky Blue
+                '#FF00FF', # Fuchsia
+                '#7B68EE', # Medium Slate Blue
+                '#FFA07A'  # Light Salmon
             ]
-            # Logika sederhana: ambil indeks warna berdasarkan hash kodepos
-            index = hash(str(kodepos)) % len(colors)
-            return colors[index]
+            index = hash(str(kodepos)) % len(bright_colors)
+            return bright_colors[index]
 
-        # 2. Ambil data dari Neon
         try:
             with engine.connect() as conn:
                 df = pd.read_sql(text("""
@@ -98,42 +107,36 @@ def main_app():
                 """), conn)
             
             if not df.empty:
-                # Koordinat default (Sesuaikan dengan wilayah operasional Anda)
-                m = folium.Map(location=[-6.9147, 107.6098], zoom_start=13, control_scale=True)
+                m = folium.Map(location=[-6.9147, 107.6098], zoom_start=13)
                 
-                # 3. Masukkan data ke peta dengan warna berbeda
                 for _, row in df.iterrows():
-                    color = get_color(row['kodepos'])
+                    color = get_bright_color(row['kodepos'])
                     
                     folium.GeoJson(
                         row['geo'],
-                        name=f"Kodepos {row['kodepos']}",
                         style_function=lambda x, color=color: {
-                            'fillColor': color,
-                            'color': 'black',     # Garis tepi hitam
+                            'fillColor': color,   # Warna cerah pilihan
+                            'color': 'white',     # Garis tepi putih agar lebih "pop"
                             'weight': 2,
-                            'fillOpacity': 0.5,
+                            'fillOpacity': 0.7,   # Opacity naik dikit biar warna lebih solid
                         },
-                        tooltip=folium.Tooltip(f"<b>Zona:</b> {row['nama_zona']}<br><b>Kodepos:</b> {row['kodepos']}")
+                        tooltip=folium.Tooltip(f"<b>{row['nama_zona']}</b> ({row['kodepos']})")
                     ).add_to(m)
 
-                # Tambahkan kontrol layer
-                folium.LayerControl().add_to(m)
-                
-                # Tampilkan peta
                 st_folium(m, width="100%", height=600)
                 
-                # 4. Tampilkan Tabel Legenda di bawah peta
-                st.markdown("### 📋 Keterangan Warna Kodepos")
-                legend_df = df[['kodepos', 'nama_zona']].copy()
-                legend_df['Warna'] = legend_df['kodepos'].apply(get_color)
-                st.dataframe(legend_df, use_container_width=True)
-                
+                # Menampilkan legenda dengan warna aslinya
+                st.markdown("### 📋 Keterangan Warna")
+                cols = st.columns(len(df) if len(df) < 5 else 5)
+                for idx, row in df.iterrows():
+                    with cols[idx % 5]:
+                        warna = get_bright_color(row['kodepos'])
+                        st.markdown(f'<div style="background-color:{warna}; padding:10px; border-radius:5px; text-align:center; color:black; font-weight:bold;">{row["kodepos"]}</div>', unsafe_allow_html=True)
+                        st.caption(row['nama_zona'])
             else:
-                st.info("Belum ada data geometri zona (Polygon) di database Neon.")
-                
+                st.info("Belum ada data geometri di database.")
         except Exception as e:
-            st.error(f"Gagal memuat peta: {e}")
+            st.error(f"Gagal: {e}")
 
     elif menu == "📦 Data Titikan Paket":
         st.header("Data Riwayat Antaran")
