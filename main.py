@@ -135,6 +135,7 @@ def main_app():
         
         try:
             with engine.connect() as conn:
+                # 1. Ambil daftar pengantar (ID + Nama)
                 query_petugas = text("""
                     SELECT DISTINCT p.id_petugas, p.nama_petugas 
                     FROM petugas_antaran p
@@ -145,9 +146,17 @@ def main_app():
                 dict_petugas = {f"{p[0]} - {p[1]}": p[0] for p in res_petugas}
 
                 if dict_petugas:
-                    selected_label = st.selectbox("Pilih Petugas Antar:", list(dict_petugas.keys()))
-                    selected_id = dict_petugas[selected_label]
+                    # --- BAGIAN FILTER (Petugas & Tanggal) ---
+                    col_f1, col_f2 = st.columns(2)
+                    with col_f1:
+                        selected_label = st.selectbox("Pilih Petugas Antar:", list(dict_petugas.keys()))
+                        selected_id = dict_petugas[selected_label]
+                    with col_f2:
+                        # Filter Tanggal (Default: Hari Ini)
+                        selected_date = st.date_input("Pilih Tanggal Kiriman:", datetime.now())
 
+                    # 2. Query Data Riwayat dengan Filter Tanggal
+                    # Kita gunakan DATE(waktu_kejadian) untuk membandingkan hanya tanggalnya saja
                     query_titik = text("""
                         SELECT 
                             connote, produk, jenis_kiriman, status_antaran, 
@@ -157,18 +166,21 @@ def main_app():
                             ST_X(geom) as longitude, 
                             ST_Y(geom) as latitude
                         FROM titikan_antaran 
-                        WHERE id_petugas = :petugas AND id_kantor = :id_kantor
+                        WHERE id_petugas = :petugas 
+                        AND id_kantor = :id_kantor
+                        AND DATE(waktu_kejadian) = :tgl
                         ORDER BY waktu_kejadian DESC
                     """)
                     
                     df_titik = pd.read_sql(query_titik, conn, params={
                         "petugas": selected_id, 
-                        "id_kantor": user['id']
+                        "id_kantor": user['id'],
+                        "tgl": selected_date
                     })
 
                     if not df_titik.empty:
                         # Peta Full Width
-                        st.subheader(f"Peta Sebaran: {selected_label}")
+                        st.subheader(f"Peta Sebaran: {selected_label} ({selected_date.strftime('%d %b %Y')})")
                         avg_lat = df_titik['latitude'].mean()
                         avg_lon = df_titik['longitude'].mean()
                         m_antaran = folium.Map(location=[avg_lat, avg_lon], zoom_start=14)
@@ -177,7 +189,6 @@ def main_app():
                             status_str = str(row['status_antaran']).upper()
                             color_icon = "green" if "SELESAI" in status_str or "DELIVERED" in status_str else "orange"
                             
-                            # Tooltip HTML Detail
                             tooltip_html = f"""
                             <div style="font-family: sans-serif; font-size: 12px; width: 250px;">
                                 <h4 style="margin:0 0 5px 0; color:#003366;">{row['connote']}</h4>
@@ -197,26 +208,23 @@ def main_app():
                                 icon=folium.Icon(color=color_icon, icon='bicycle', prefix='fa')
                             ).add_to(m_antaran)
                         
-                        st_folium(m_antaran, width="100%", height=500, key="map_riwayat_full")
+                        st_folium(m_antaran, width="100%", height=500, key=f"map_{selected_id}_{selected_date}")
 
                         st.markdown("---")
 
                         # --- BAGIAN RESUME & RINCIAN ---
-                        st.subheader("📊 Resume & Rincian Kiriman")
+                        st.subheader(f"📊 Resume & Rincian - {selected_date.strftime('%d/%m/%Y')}")
                         
-                        # Metrik Utama
                         m1, m2, m3 = st.columns(3)
                         m1.metric("Total Antaran", len(df_titik))
                         success_count = len(df_titik[df_titik['status_antaran'].str.contains('Selesai|Delivered', case=False, na=False)])
                         m2.metric("Berhasil (Selesai)", success_count)
                         m3.metric("Gagal / Proses", len(df_titik) - success_count)
 
-                        # Tabel Resume per Produk
                         st.markdown("##### Resume per Produk")
                         resume_produk = df_titik.groupby(['produk', 'status_antaran']).size().reset_index(name='Jumlah')
                         st.dataframe(resume_produk, use_container_width=True, hide_index=True)
 
-                        # Tabel Detail Lengkap
                         st.markdown("##### Rincian Data")
                         st.dataframe(
                             df_titik[['connote', 'produk', 'penerima', 'status_antaran', 'waktu_kejadian', 'alamat_penerima', 'keterangan']], 
@@ -224,7 +232,7 @@ def main_app():
                             hide_index=True
                         )
                     else:
-                        st.warning(f"Belum ada koordinat untuk petugas {selected_label}")
+                        st.warning(f"Tidak ada data titikan untuk petugas {selected_label} pada tanggal {selected_date}")
                 else:
                     st.info("Tidak ada data petugas pengantar yang tercatat memiliki titikan di kantor ini.")
 
