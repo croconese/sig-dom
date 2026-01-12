@@ -195,7 +195,7 @@ def main_app():
                                 <b>Penerima:</b> {row['penerima']}<br>
                                 <b>Alamat:</b> {row['alamat_penerima']}<br>
                                 <b>Produk:</b> {row['produk']} ({row['jenis_kiriman']})<br>
-                                <b>Berat:</b> {row['berat_kg']}<br>
+                                <b>Berat:</b> {row['berat_kg']} kg<br>
                                 <b>Status:</b> <span style="color:{'green' if color_icon=='green' else 'red'};">{row['status_antaran']}</span><br>
                                 <b>Waktu:</b> {row['waktu_kejadian']}<br>
                                 <b>Keterangan:</b> {row['keterangan'] or '-'}
