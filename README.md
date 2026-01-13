@@ -35,16 +35,7 @@ Tanpa visualisasi spasial, manajemen di Delivery Center (DC) atau Kantor Cabang/
  4. ANALISIS KINERJA ANTARAN yang akan menampilkan dashboard untuk melakukan kalkulasi/perhitungan sederhana serta mengukur kinerja proses antaran.
 
 # Tools Pengembangan
-  - Backend : Node.js
-  - Backend Framework: Express.js 
-  - Database Driver:  PostgreSQL
-  - Frontend : React
+  - Framework : Streamlit
+  - Language : Python
+  - Database Driver:  PostgreSQL + PostGIS (Neon.tech)
   - Map : Leaflet
-# SIG-DOM (Sistem Informasi Geografis - Delivery Operation Management)
-Projek ini adalah sistem pemantauan penghantaran PT Pos Indonesia menggunakan GIS.
-
-### Stack Teknologi:
-- **Database:** PostgreSQL + PostGIS (Supabase)
-- **Language:** Python
-- **Framework:** Streamlit
-- **Maps:** Leaflet via Folium
